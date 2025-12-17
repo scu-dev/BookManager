@@ -137,8 +137,6 @@ namespace BookManager {
                 static_cast<void>(writeBook(prev, book));
             }
         }
-
-        // Remove from Title list
         prev = FilePointer(-1);
         curr = header.firstByTitle;
         while (curr) {
