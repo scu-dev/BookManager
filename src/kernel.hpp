@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -10,409 +11,278 @@
 #include "file.hpp"
 
 namespace BookManager {
-    typedef uint8_t u8;
-    using std::string, std::stringstream, std::vector, std::sort, std::setw, std::fixed, std::setprecision, std::stod, std::min, std::left, std::defaultfloat;
+    typedef int32_t i32;
+    typedef uint64_t u64;
+    using std::string, std::vector, std::fstream, std::cout, std::cin, std::endl, std::setw, std::left, std::ios, std::lower_bound, std::stringstream;
 
-    enum struct State : u8 {
-        MAIN_MENU,
-        INSERT_ISBN, INSERT_TITLE, INSERT_AUTHOR, INSERT_PRICE, INSERT_BUY_DATE,
-        DELETE,
-        UPDATE_SELECT, UPDATE_ISBN, UPDATE_TITLE, UPDATE_AUTHOR, UPDATE_PRICE, UPDATE_BUY_DATE,
-        SEARCH_SELECT, SEARCH_TITLE, SEARCH_AUTHOR,
-    };
+    inline vector<ISBNIndex> numIndexTable;
+    inline vector<TitleIndex> titleIndexTable;
 
-    namespace {
-        inline State s{State::MAIN_MENU};
-
-        template<size_t N>
-        inline string toString(const array<u8, N>& arr) noexcept {
-            const char* ptr = reinterpret_cast<const char*>(arr.data());
-            size_t len = 0;
-            while (len < N && ptr[len] != '\0') len++;
-            return string(ptr, len);
-        }
-
-        template<size_t N>
-        inline void fromString(array<u8, N>& arr, const string& str) noexcept {
-            const size_t len = min(str.length(), N);
-            memcpy(arr.data(), str.data(), len);
-            if (len < N) memset(arr.data() + len, 0, N - len);
-        }
-
-        [[nodiscard]] inline size_t getDisplayLength(const string& str) noexcept {
-            size_t len = 0;
-            for (size_t i = 0; i < str.length(); i++) {
-                const u8 c = str[i];
-                if (c < 0x80) len++;
-                else if (c >= 0xC0) len += 2;
-            }
-            return len;
-        }
-
-        [[nodiscard]] inline size_t getPadWidth(const string& str, size_t width) noexcept {
-            const size_t visual = getDisplayLength(str);
-            return str.length() + (width > visual ? width - visual : 0);
-        }
+    inline void Display(const Book& book) noexcept {
+        cout << left << setw(15) << book.getISBN() << setw(22) << book.getTitle() << setw(12) << book.getAuthor() << setw(8) << book.price << book.buyDate.year << "-" << static_cast<i32>(book.buyDate.month) << "-" << static_cast<i32>(book.buyDate.day) << endl;
     }
 
-    [[nodiscard]] inline State getState() noexcept { return s; }
-    inline void setState(State newState) noexcept { s = newState; }
-
-    [[nodiscard]] inline const char* getPrompt() noexcept {
-        switch (s) {
-            case State::MAIN_MENU:
-                return "1.插入记录 2.删除记录 3.更新记录 4.查找记录 5.按作者名排序 6.退出\n输入选择：";
-            case State::SEARCH_SELECT:
-                return "1.按照书名查找 2.按照作者名查找 3.退出查找\n输入选择：";
-            case State::INSERT_ISBN:
-            case State::DELETE:
-            case State::UPDATE_SELECT:
-            case State::UPDATE_ISBN:
-                return "输入书号：";
-            case State::INSERT_TITLE:
-            case State::UPDATE_TITLE:
-            case State::SEARCH_TITLE:
-                return "输入书名：";
-            case State::INSERT_AUTHOR:
-            case State::UPDATE_AUTHOR:
-            case State::SEARCH_AUTHOR:
-                return "输入作者名：";
-            case State::INSERT_PRICE:
-            case State::UPDATE_PRICE:
-                return "输入价格：";
-            case State::INSERT_BUY_DATE:
-            case State::UPDATE_BUY_DATE:
-                return "输入购买日期(YYYY MM DD)：";
-            default:
-                return "错误：";
-        }
+    inline void InsertHelp(Book& book, FilePointer offset) noexcept {
+        ISBNIndex numItem;
+        numItem.isbn = book.isbn;
+        numItem.offset = offset;
+        auto itNum = lower_bound(numIndexTable.begin(), numIndexTable.end(), numItem);
+        numIndexTable.insert(itNum, numItem);
+        TitleIndex titleItem;
+        titleItem.title = book.title;
+        titleItem.head = offset;
+        auto itTitle = lower_bound(titleIndexTable.begin(), titleIndexTable.end(), titleItem);
+        if (itTitle != titleIndexTable.end() && itTitle->title == book.title) itTitle->head = offset;
+        else titleIndexTable.insert(itTitle, titleItem);
     }
 
-    inline void insertBookToLists(FilePointer newPtr, Book& newBook) noexcept {
-        FilePointer prev = FilePointer(-1), curr = header.firstByISBN;
+    inline void Insert() noexcept {
         Book book;
-        while (curr) {
-            if (!readBook(curr, book)) break;
-            if (toString(newBook.isbn) < toString(book.isbn)) break;
-            prev = curr;
-            curr = book.nextISBN;
+        string input;
+        cout << "输入书号：";
+        getline(cin, input);
+        book.setISBN(input);
+        auto itCheck = lower_bound(numIndexTable.begin(), numIndexTable.end(), book.getISBN(), [](const ISBNIndex& item, string_view val) {
+            return item < val;
+        });
+        if (itCheck != numIndexTable.end() && itCheck->getISBN() == book.getISBN()) {
+            cout << "错误：书号已存在！" << endl;
+            return;
         }
-        newBook.nextISBN = curr;
-        if (!prev) header.firstByISBN = newPtr;
-        else if (readBook(prev, book)) {
-            book.nextISBN = newPtr;
-            static_cast<void>(writeBook(prev, book));
-        }
-        prev = FilePointer(-1);
-        curr = header.firstByTitle;
-        while (curr) {
-            if (!readBook(curr, book)) break;
-            if (toString(newBook.title) < toString(book.title)) break;
-            prev = curr;
-            curr = book.nextTitle;
-        }
-        newBook.nextTitle = curr;
-        if (!prev) header.firstByTitle = newPtr;
-        else if (readBook(prev, book)) {
-            book.nextTitle = newPtr;
-            static_cast<void>(writeBook(prev, book));
-        }
-        static_cast<void>(writeBook(newPtr, newBook));
-        writeHeader();
+        cout << "输入书名：";
+        getline(cin, input);
+        book.setTitle(input);
+        cout << "输入作者名：";
+        getline(cin, input);
+        book.setAuthor(input);
+        cout << "输入价格：";
+        getline(cin, input);
+        try { book.price = stof(input); }
+        catch(...) { book.price = 0; }
+        cout << "输入购买日期(YYYY MM DD)：";
+        getline(cin, input);
+        stringstream ss(input);
+        i32 y, m, d;
+        ss >> y >> m >> d;
+        book.buyDate.year = static_cast<u16>(y);
+        book.buyDate.month = static_cast<u8>(m);
+        book.buyDate.day = static_cast<u8>(d);
+        auto itTitle = lower_bound(titleIndexTable.begin(), titleIndexTable.end(), book.getTitle(), [](const TitleIndex& item, string_view val) {
+            return item < val;
+        });
+        if (itTitle != titleIndexTable.end() && itTitle->title == book.title) book.titleNext = itTitle->head;
+        else book.titleNext = FilePointer(-1);
+        FilePointer offset = allocBook();
+        static_cast<void>(writeBook(offset, book));
+        InsertHelp(book, offset);
+        cout << "插入成功！" << endl;
     }
 
-    inline void removeBookFromLists(FilePointer ptr, const Book& bookToRemove) noexcept {
-        FilePointer prev = FilePointer(-1), curr = header.firstByISBN;
-        Book book;
-        while (curr) {
-            if (curr == ptr) break;
-            prev = curr;
-            if (!readBook(curr, book)) break;
-            curr = book.nextISBN;
-        }
-        if (curr) {
-            if (!prev) header.firstByISBN = bookToRemove.nextISBN;
-            else if (readBook(prev, book)) {
-                book.nextISBN = bookToRemove.nextISBN;
-                static_cast<void>(writeBook(prev, book));
-            }
-        }
-        prev = FilePointer(-1);
-        curr = header.firstByTitle;
-        while (curr) {
-            if (curr == ptr) break;
-            prev = curr;
-            if (!readBook(curr, book)) break;
-            curr = book.nextTitle;
-        }
-        if (curr) {
-            if (!prev) header.firstByTitle = bookToRemove.nextTitle;
-            else if (readBook(prev, book)) {
-                book.nextTitle = bookToRemove.nextTitle;
-                static_cast<void>(writeBook(prev, book));
-            }
-        }
-        writeHeader();
-    }
-
-    [[nodiscard]] inline FilePointer findBookByISBN(const string& isbn) noexcept {
-        FilePointer curr = header.firstByISBN;
-        Book book;
-        while (curr) {
-            if (!readBook(curr, book)) break;
-            if (toString(book.isbn) == isbn) return curr;
-            curr = book.nextISBN;
-        }
-        return FilePointer(-1);
-    }
-
-    [[nodiscard]] inline string printHeader() noexcept {
-        stringstream ss;
-        ss << left << setw(20) << "书号" << setw(32) << "书名" << setw(23) << "作者名" << setw(12) << "价格" << "购买日期";
-        return ss.str();
-    }
-
-    [[nodiscard]] inline string printBook(const Book& b) noexcept {
-        stringstream ss;
-        const string isbn = toString(b.isbn), title = toString(b.title), author = toString(b.author);
-        ss << left << setw(getPadWidth(isbn, 18)) << isbn << setw(getPadWidth(title, 30)) << title << setw(getPadWidth(author, 20)) << author << setw(10) << fixed << setprecision(2) << b.price << b.buyDate.year << "-" << static_cast<int>(b.buyDate.month) << "-" << static_cast<int>(b.buyDate.day);
-        return ss.str();
-    }
-
-    [[nodiscard]] inline bool processInput(const string& input, string& output) noexcept {
-        static Book tempBook;
-        static FilePointer targetPtr;
-        static Book targetBook;
-        output = "";
-        switch (s) {
-            case State::MAIN_MENU:
-                if (input.size() != 1) {
-                    output = "无效输入";
-                    return false;
+    inline void UnlinkTitle(const Book& book, FilePointer offset) noexcept {
+        auto itTitle = lower_bound(titleIndexTable.begin(), titleIndexTable.end(), book.getTitle(), [](const TitleIndex& item, string_view val) {
+            return item < val;
+        });
+        if (itTitle != titleIndexTable.end() && itTitle->title == book.title) {
+            if (itTitle->head == offset) {
+                if (book.titleNext) {
+                    itTitle->head = book.titleNext;
+                } else {
+                    titleIndexTable.erase(itTitle);
                 }
-                switch (input[0]) {
-                    case '1':
-                        setState(State::INSERT_ISBN);
-                        break;
-                    case '2':
-                        setState(State::DELETE);
-                        break;
-                    case '3':
-                        setState(State::UPDATE_SELECT);
-                        break;
-                    case '4':
-                        setState(State::SEARCH_SELECT);
-                        break;
-                    case '5': {
-                        vector<Book> books;
-                        FilePointer curr = header.firstByTitle;
-                        Book book;
-                        while (curr) {
-                            if (!readBook(curr, book)) break;
-                            books.push_back(book);
-                            curr = book.nextTitle;
-                        }
-                        sort(books.begin(), books.end(), [](const Book& a, const Book& b) {
-                            return toString(a.author) < toString(b.author);
-                        });
-                        stringstream ss;
-                        if (!books.empty()) ss << printHeader() << '\n';
-                        for (u64 i = 0; i < books.size(); i++) ss << printBook(books[i]) << '\n';
-                        output = ss.str();
-                        if (output.empty()) output = "无记录";
-                        break;
-                    }
-                    default:
-                        output = "无效输入";
-                        return false;
-                }
-                break;
-            case State::INSERT_ISBN:
-                if (input.length() > 13) {
-                    output = "ISBN过长";
-                    return false;
-                }
-                if (findBookByISBN(input)) {
-                    output = "ISBN已存在";
-                    setState(State::MAIN_MENU);
-                    return false;
-                }
-                tempBook = Book{};
-                fromString(tempBook.isbn, input);
-                setState(State::INSERT_TITLE);
-                break;
-            case State::INSERT_TITLE:
-                if (input.length() > 90) {
-                    output = "书名过长";
-                    return false;
-                }
-                fromString(tempBook.title, input);
-                setState(State::INSERT_AUTHOR);
-                break;
-            case State::INSERT_AUTHOR:
-                if (input.length() > 60) {
-                    output = "作者名过长";
-                    return false;
-                }
-                fromString(tempBook.author, input);
-                setState(State::INSERT_PRICE);
-                break;
-            case State::INSERT_PRICE:
-                try { tempBook.price = stod(input); }
-                catch(...) {
-                    output = "价格无效";
-                    return false;
-                }
-                setState(State::INSERT_BUY_DATE);
-                break;
-            case State::INSERT_BUY_DATE: {
-                stringstream ss(input);
-                u16 y, m, d;
-                if (!(ss >> y >> m >> d)) {
-                    output = "日期格式错误";
-                    return false;
-                }
-                tempBook.buyDate.year = y;
-                tempBook.buyDate.month = static_cast<u8>(m);
-                tempBook.buyDate.day = static_cast<u8>(d);
-                insertBookToLists(allocBook(), tempBook);
-                output = "插入成功";
-                setState(State::MAIN_MENU);
-                break;
-            }
-            case State::DELETE:
-                targetPtr = findBookByISBN(input);
-                if (!targetPtr) {
-                    output = "未找到记录";
-                    setState(State::MAIN_MENU);
-                    return false;
-                }
-                if (!readBook(targetPtr, targetBook)) {
-                    output = "读取记录失败";
-                    return false;
-                }
-                removeBookFromLists(targetPtr, targetBook);
-                static_cast<void>(deleteBook(targetPtr));
-                output = "删除成功";
-                setState(State::MAIN_MENU);
-                break;
-            case State::UPDATE_SELECT: {
-                targetPtr = findBookByISBN(input);
-                if (!targetPtr) {
-                    output = "未找到记录"; setState(State::MAIN_MENU);
-                    return false;
-                }
-                if (!readBook(targetPtr, targetBook)) {
-                    output = "读取记录失败";
-                    return false;
-                }
-                stringstream ss;
-                ss << printHeader() << "\n" << printBook(targetBook);
-                output = ss.str();
-                setState(State::UPDATE_ISBN);
-                break;
-            }
-            case State::UPDATE_ISBN:
-                if (input != toString(targetBook.isbn) && findBookByISBN(input)) {
-                    output = "ISBN已存在";
-                    return false;
-                }
-                removeBookFromLists(targetPtr, targetBook);
-                fromString(targetBook.isbn, input);
-                insertBookToLists(targetPtr, targetBook);
-                output = "更新成功";
-                setState(State::UPDATE_TITLE);
-                break;
-            case State::UPDATE_TITLE:
-                removeBookFromLists(targetPtr, targetBook);
-                fromString(targetBook.title, input);
-                insertBookToLists(targetPtr, targetBook);
-                output = "更新成功";
-                setState(State::UPDATE_AUTHOR);
-                break;
-            case State::UPDATE_AUTHOR:
-                fromString(targetBook.author, input);
-                static_cast<void>(writeBook(targetPtr, targetBook));
-                output = "更新成功";
-                setState(State::UPDATE_PRICE);
-                break;
-            case State::UPDATE_PRICE:
-                try { targetBook.price = stod(input); }
-                catch(...) {
-                    output = "价格无效";
-                    return false;
-                }
-                static_cast<void>(writeBook(targetPtr, targetBook));
-                output = "更新成功";
-                setState(State::UPDATE_BUY_DATE);
-                break;
-            case State::UPDATE_BUY_DATE: {
-                stringstream ss(input);
-                u16 y, m, d;
-                if (!(ss >> y >> m >> d)) {
-                    output = "日期格式错误";
-                    return false;
-                }
-                targetBook.buyDate.year = y;
-                targetBook.buyDate.month = static_cast<u8>(m);
-                targetBook.buyDate.day = static_cast<u8>(d);
-                static_cast<void>(writeBook(targetPtr, targetBook));
-                output = "更新成功";
-                setState(State::MAIN_MENU);
-                break;
-            }
-            case State::SEARCH_SELECT:
-                if (input == "1") setState(State::SEARCH_TITLE);
-                else if (input == "2") setState(State::SEARCH_AUTHOR);
-                else if (input == "3") setState(State::MAIN_MENU);
-                else {
-                    output = "无效选择";
-                    return false;
-                }
-                break;
-            case State::SEARCH_TITLE: {
-                stringstream ss;
-                FilePointer curr = header.firstByTitle;
+            } else {
+                FilePointer curr = itTitle->head;
                 Book b;
-                bool found = false;
                 while (curr) {
-                    if (!readBook(curr, b)) break;
-                    if (toString(b.title).find(input) != string::npos) {
-                        if (!found) {
-                            ss << printHeader() << '\n';
-                            found = true;
+                    if (readBook(curr, b)) {
+                        if (b.titleNext == offset) {
+                            b.titleNext = book.titleNext;
+                            static_cast<void>(writeBook(curr, b));
+                            break;
                         }
-                        ss << printBook(b) << '\n';
-                    }
-                    curr = b.nextTitle;
+                        curr = b.titleNext;
+                    } else break;
                 }
-                output = ss.str();
-                if (!found) output = "未找到";
-                setState(State::SEARCH_SELECT);
-                break;
-            }
-            case State::SEARCH_AUTHOR: {
-                stringstream ss;
-                FilePointer curr = header.firstByTitle;
-                Book b;
-                bool found = false;
-                while (curr) {
-                    if (!readBook(curr, b)) break;
-                    if (toString(b.author).find(input) != string::npos) {
-                        if (!found) {
-                            ss << printHeader() << '\n';
-                            found = true;
-                        }
-                        ss << printBook(b) << '\n';
-                    }
-                    curr = b.nextTitle;
-                }
-                output = ss.str();
-                if (!found) output = "未找到";
-                setState(State::SEARCH_SELECT);
-                break;
             }
         }
+    }
+
+    inline void Delete() noexcept {
+        cout << "输入书号：";
+        string num;
+        getline(cin, num);
+        auto it = lower_bound(numIndexTable.begin(), numIndexTable.end(), num, [](const ISBNIndex& item, string_view val) {
+            return item < val;
+        });
+        if (it == numIndexTable.end() || it->getISBN() != num) {
+            cout << "未找到该书号！" << endl;
+            return;
+        }
+        FilePointer offset = it->offset;
+        Book book;
+        if (!readBook(offset, book)) {
+            cout << "读取失败！" << endl;
+            return;
+        }
+        UnlinkTitle(book, offset);
+        numIndexTable.erase(it);
+        static_cast<void>(deleteBook(offset));
+        cout << "删除成功！" << endl;
+    }
+
+    inline void Update() noexcept {
+        cout << "输入书号：";
+        string num;
+        getline(cin, num);
+        auto it = lower_bound(numIndexTable.begin(), numIndexTable.end(), num, [](const ISBNIndex& item, string_view val) {
+            return item < val;
+        });
+        if (it == numIndexTable.end() || it->getISBN() != num) {
+            cout << "未找到该书号！" << endl;
+            return;
+        }
+        FilePointer offset = it->offset;
+        Book oldBook;
+        if (!readBook(offset, oldBook)) return;
+        UnlinkTitle(oldBook, offset);
+        numIndexTable.erase(it);
+        static_cast<void>(deleteBook(offset));
+        Book newBook = oldBook;
+        newBook.isDeleted = false;
+        string input;
+        cout << "输入新书名 (" << oldBook.getTitle() << ")："; 
+        getline(cin, input);
+        if(!input.empty()) newBook.setTitle(input);
+        cout << "输入新作者 (" << oldBook.getAuthor() << ")：";
+        getline(cin, input);
+        if(!input.empty()) newBook.setAuthor(input);
+        cout << "输入新价格 (" << oldBook.price << ")：";
+        getline(cin, input);
+        if(!input.empty()) newBook.price = stof(input);
+        auto itTitle = lower_bound(titleIndexTable.begin(), titleIndexTable.end(), newBook.getTitle(), [](const TitleIndex& item, string_view val) {
+            return item < val;
+        });
+        if (itTitle != titleIndexTable.end() && itTitle->title == newBook.title) newBook.titleNext = itTitle->head;
+        else newBook.titleNext = FilePointer{};
+        FilePointer newOffset = allocBook();
+        static_cast<void>(writeBook(newOffset, newBook));
+        InsertHelp(newBook, newOffset);
+        cout << "更新成功！" << endl;
+    }
+
+    inline void SearchByTile() noexcept {
+        cout << "输入书名：";
+        string title;
+        getline(cin, title);
+        auto it = lower_bound(titleIndexTable.begin(), titleIndexTable.end(), title, [](const TitleIndex& item, string_view val) {
+            return item < val;
+        });
+        if (it == titleIndexTable.end() || it->getTitle() != title) {
+            cout << "查无此书！" << endl;
+            return;
+        }
+        FilePointer current = it->head;
+        while (current) {
+            Book book;
+            if (readBook(current, book)) {
+                if (!book.isDeleted) Display(book);
+                current = book.titleNext;
+            }
+            else break;
+        }
+    }
+
+    inline void SearchByAuthor() noexcept {
+        cout << "输入作者名：";
+        string author;
+        getline(cin, author);
+        bool found = false;
+        scanBooks([&](const Book& book, FilePointer) {
+            if (!book.isDeleted && book.getAuthor() == author) {
+                Display(book);
+                found = true;
+            }
+        });
+        if (!found) cout << "查无此人！" << endl;
+    }
+
+    inline void Search() noexcept {
+        cout << "1.按照书名查找 2.按照作者名查找\n输入选择：";
+        string choice;
+        getline(cin, choice);
+        if (choice == "1") SearchByTile();
+        else if (choice == "2") SearchByAuthor();
+    }
+
+    inline void SortByAuthor() noexcept {
+        vector<Book> books;
+        scanBooks([&](const Book& book, FilePointer) {
+            if (!book.isDeleted) books.push_back(book);
+        });
+        sort(books.begin(), books.end(), [](const Book& a, const Book& b) {
+            return a.getAuthor() < b.getAuthor();
+        });
+        for (u64 i = 0; i < books.size(); i++) Display(books[i]);
+    }
+
+    inline void rebuildIndices() noexcept {
+        numIndexTable.clear();
+        titleIndexTable.clear();
+        scanBooks([](const Book& book, FilePointer offset) {
+            if (!book.isDeleted) {
+                ISBNIndex numItem;
+                numItem.isbn = book.isbn;
+                numItem.offset = offset;
+                numIndexTable.push_back(numItem);
+                bool found = false;
+                for (u64 i = 0; i < titleIndexTable.size(); i++) if (titleIndexTable[i].title == book.title) {
+                    titleIndexTable[i].head = offset; 
+                    found = true;
+                    break;
+                }
+                if (!found) {
+                    TitleIndex titleItem;
+                    titleItem.title = book.title;
+                    titleItem.head = offset;
+                    titleIndexTable.push_back(titleItem);
+                }
+            }
+        });
+        sort(numIndexTable.begin(), numIndexTable.end());
+        sort(titleIndexTable.begin(), titleIndexTable.end());
+    }
+
+    [[nodiscard]] inline bool init() noexcept {
+        if (!openFile()) return false;
+        rebuildIndices();
         return true;
+    }
+
+    inline void shutdown() noexcept { closeFile(); }
+
+    inline void processInput(const string& input) noexcept {
+        if (input.size() != 1) {
+            cout << "无效选择" << endl;
+            return;
+        }
+        switch (input[0]) {
+            case '1':
+                Insert();
+                break;
+            case '2':
+                Delete();
+                break;
+            case '3':
+                Update();
+                break;
+            case '4':
+                Search();
+                break;
+            case '5':
+                SortByAuthor();
+                break;
+            default:
+                cout << "无效选择" << endl;
+                break;
+        }
     }
 }

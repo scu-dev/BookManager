@@ -56,6 +56,18 @@ namespace BookManager {
         }
     }
 
+    template<typename F>
+    inline void scanBooks(F callback) noexcept {
+        file.clear();
+        file.seekg(sizeof(Header), ios::beg);
+        Book book;
+        while (file.read(reinterpret_cast<char*>(&book), sizeof(Book))) {
+            FilePointer ptr(static_cast<i64>(file.tellg()) - sizeof(Book));
+            callback(book, ptr);
+        }
+        file.clear();
+    }
+
     [[nodiscard]] inline bool readBook(FilePointer ptr, Book& result) noexcept {
         if (!ptr) return false;
         file.seekg(ptr.value, ios::beg);
@@ -76,7 +88,7 @@ namespace BookManager {
             ptr = header.firstFreeSlot;
             Book book;
             static_cast<void>(readBook(ptr, book));
-            header.firstFreeSlot = book.nextTitle;
+            header.firstFreeSlot = book.titleNext;
         }
         else {
             file.seekp(0, ios::end);
@@ -91,7 +103,7 @@ namespace BookManager {
         Book book;
         if (!readBook(ptr, book)) return false;
         book.isDeleted = true;
-        book.nextTitle = header.firstFreeSlot;
+        book.titleNext = header.firstFreeSlot;
         header.firstFreeSlot = ptr;
         static_cast<void>(writeBook(ptr, book));
         header.activeCount--;
