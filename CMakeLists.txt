@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION "3.20")
+﻿cmake_minimum_required(VERSION "3.25")
 
 project("BookManager")
 
@@ -17,12 +17,10 @@ set(CMAKE_SUPPRESS_REGENERATION ON CACHE BOOL "" FORCE)
 #----------Before Tweaks-----------
 if(MSVC)
     add_link_options(/INCREMENTAL)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:__cplusplus /Zc:preprocessor /utf-8")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:__cplusplus /utf-8")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /utf-8")
     cmake_policy(SET CMP0091 NEW)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
     foreach(flag_var
         CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
         CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE)
