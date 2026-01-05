@@ -36,10 +36,10 @@ int main() {
             continue;
         }
         switch (input[0]) {
-            case '1': insertBookState();          break;
-            case '2': deleteBookState();          break;
-            case '3': updateBookState();          break;
-            case '4': searchBookState();          break;
+            case '1': insertBookState();     break;
+            case '2': deleteBookState();     break;
+            case '3': updateBookState();     break;
+            case '4': searchBookState();     break;
             case '5': sortByAuthor();        break;
             default:  cout << "无效选择。\n"; break;
         }
