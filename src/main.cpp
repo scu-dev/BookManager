@@ -14,7 +14,7 @@
 #endif
 
 int main() {
-    using std::memory_order_acquire, std::cin, std::cout, std::string, BookManager::insertBook, BookManager::deleteBook, BookManager::updateBook, BookManager::searchBook, BookManager::sortByAuthor, BookManager::buildIndices;
+    using std::memory_order_acquire, std::cin, std::cout, std::string, BookManager::insertBookState, BookManager::deleteBookState, BookManager::updateBookState, BookManager::searchBookState, BookManager::sortByAuthor, BookManager::buildIndices;
 
     #if BM_WINDOWS
         SetConsoleOutputCP(CP_UTF8);
@@ -36,10 +36,10 @@ int main() {
             continue;
         }
         switch (input[0]) {
-            case '1': insertBook();          break;
-            case '2': deleteBook();          break;
-            case '3': updateBook();          break;
-            case '4': searchBook();          break;
+            case '1': insertBookState();          break;
+            case '2': deleteBookState();          break;
+            case '3': updateBookState();          break;
+            case '4': searchBookState();          break;
             case '5': sortByAuthor();        break;
             default:  cout << "无效选择。\n"; break;
         }

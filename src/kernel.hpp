@@ -11,7 +11,7 @@
 namespace BookManager {
     using std::cin, std::cout, std::string, std::vector;
 
-    inline void insertBook() noexcept {
+    inline void insertBookState() noexcept {
         Book book;
         {
             string input;
@@ -48,7 +48,7 @@ namespace BookManager {
         cout << "插入成功！\n";
     }
     
-    inline void deleteBook() noexcept {
+    inline void deleteBookState() noexcept {
         string input;
         cout << "输入书号：";
         cin >> input;
@@ -68,7 +68,7 @@ namespace BookManager {
         cout << "删除成功！\n";
     }
     
-    inline void updateBook() noexcept {
+    inline void updateBookState() noexcept {
         string input;
         cout << "输入书号：";
         cin >> input;
@@ -120,7 +120,7 @@ namespace BookManager {
         cout << "更新成功！\n";
     }
 
-    inline void searchBook() noexcept {
+    inline void searchBookState() noexcept {
         string input;
         while (true) {
             cout << "1.按照书名查找 2.按照作者名查找 3.退出查找\n输入选择：";
